@@ -125,30 +125,6 @@ stages:
           vmImage: "ubuntu-latest"
         steps:
           - task: AzureCLI@2
-            displayName: "Delete existing ACI container"
-            inputs:
-              azureSubscription: "Cost Forecasting ML- v1"
-              scriptType: "bash"
-              scriptLocation: "inlineScript"
-              inlineScript: |
-                EXISTS=$(az container show \
-                  --resource-group $(RESOURCE_GROUP) \
-                  --name $(ACI_NAME) \
-                  --query name \
-                  --output tsv 2>/dev/null || echo "")
-
-                if [ -n "$EXISTS" ]; then
-                  echo "Existing container found — deleting..."
-                  az container delete \
-                    --resource-group $(RESOURCE_GROUP) \
-                    --name $(ACI_NAME) \
-                    --yes
-                  echo "✅ Existing container deleted"
-                else
-                  echo "No existing container found — skipping delete"
-                fi
-
-          - task: AzureCLI@2
             displayName: "Deploy new ACI container"
             inputs:
               azureSubscription: "Cost Forecasting ML- v1"
@@ -156,31 +132,32 @@ stages:
               scriptLocation: "inlineScript"
               inlineScript: |
                 ACR_PASSWORD=$(az acr credential show \
-                  --name $(ACR_NAME) \
+                  --name costforecastingmlopsacr \
                   --query "passwords[0].value" \
                   --output tsv)
 
                 az container create \
-                  --resource-group $(RESOURCE_GROUP) \
-                  --name $(ACI_NAME) \
-                  --image $(ACR_LOGIN_SERVER)/$(IMAGE_NAME):$(IMAGE_TAG) \
+                  --resource-group mirlin-ml-dev \
+                  --name interview-coach-$(IMAGE_TAG) \
+                  --image costforecastingmlopsacr.azurecr.io/interview-coach-app:$(IMAGE_TAG) \
                   --cpu 1 \
                   --memory 1.5 \
-                  --registry-login-server $(ACR_LOGIN_SERVER) \
-                  --registry-username $(ACR_NAME) \
+                  --registry-login-server costforecastingmlopsacr.azurecr.io \
+                  --registry-username costforecastingmlopsacr \
                   --registry-password $ACR_PASSWORD \
-                  --dns-name-label $(ACI_NAME) \
+                  --dns-name-label interview-coach-$(IMAGE_TAG) \
                   --ports 8000 \
                   --os-type Linux \
                   --environment-variables OPENAI_API_KEY=$(OPENAI_API_KEY) \
-                  --location $(LOCATION)
+                  --location canadacentral
 
                 echo "============================================"
-                echo "✅ ACI container deployed successfully"
-                echo "🌐 http://$(PUBLIC_URL):8000"
+                echo "✅ New container deployed successfully"
+                echo "🌐 http://interview-coach-$(IMAGE_TAG).canadacentral.azurecontainer.io:8000"
                 echo "============================================"
             env:
               OPENAI_API_KEY: $(OPENAI_API_KEY)
+
 
   # ─────────────────────────────────────────────
   # Stage 4: Health Verification
@@ -201,7 +178,7 @@ stages:
             displayName: "Wait for container to start"
 
           - script: |
-              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$(PUBLIC_URL):8000/health)
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://interview-coach-$(IMAGE_TAG).canadacentral.azurecontainer.io:8000/health)
               echo "Health check response: $HTTP_STATUS"
 
               if [ "$HTTP_STATUS" != "200" ]; then
@@ -214,8 +191,8 @@ stages:
 
           - script: |
               echo "============================================"
-              RESPONSE=$(curl -s http://$(PUBLIC_URL):8000/health)
+              RESPONSE=$(curl -s http://interview-coach-$(IMAGE_TAG).canadacentral.azurecontainer.io:8000/health)
               echo "Health response: $RESPONSE"
-              echo "🌐 Live URL: http://$(PUBLIC_URL):8000"
+              echo "🌐 Live URL: http://interview-coach-$(IMAGE_TAG).canadacentral.azurecontainer.io:8000"
               echo "============================================"
             displayName: "Print live URL"
