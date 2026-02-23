@@ -69,7 +69,7 @@ stages:
   - stage: BuildAndPush
     displayName: "🐳 Build & Push — Azure Container Registry"
     dependsOn: QualityGate
-    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/master'), eq(variables['Build.SourceBranch'], 'refs/heads/main')))
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/master'), eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/dev')))
     jobs:
       - job: BuildAndPushImage
         displayName: "Docker Build & Push to ACR"
