@@ -37,6 +37,11 @@ class ReportRequest(BaseModel):
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "smart-interview-prep-agent", "version": "1.0.0"}
+
+
 @app.post("/generate")
 def generate(req: GenerateRequest):
     """Step 1: Generate interview questions from JD + Resume."""
