@@ -196,8 +196,8 @@ stages:
           vmImage: "ubuntu-latest"
         steps:
           - script: |
-              echo "Waiting 40 seconds for ACI to be ready..."
-              sleep 40
+              echo "Waiting 90 seconds for ACI to be ready..."
+              sleep 90
             displayName: "Wait for container to start"
 
           - script: |
