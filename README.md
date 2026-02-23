@@ -1,4 +1,4 @@
-# AI Interview Coach — LLMOps
+# Smart Interview Prep Agent
 
 An AI-powered interview preparation tool built with LangGraph and GPT-4o. Paste your resume and a job description — the agent generates role-specific interview questions, evaluates your answers, and returns scored feedback with improvement suggestions.
 
@@ -65,14 +65,14 @@ Stage 2: 🐳 Build & Push to ACR
 └── Push :latest + :buildId to ACR
 
 Stage 3: 🚀 Deploy to ACI
-├── Delete existing container (if exists)
+├── Delete existing container if exists
 ├── Fetch ACR credentials automatically
-└── Create fresh ACI container with new image
+└── Deploy fresh container with new image
 
 Stage 4: 🔍 Health Verification
 ├── Wait for container to boot
 ├── Hit /health endpoint
-└── Assert HTTP 200 — print live URL
+└── Assert HTTP 200
 ```
 
 ---
@@ -80,7 +80,7 @@ Stage 4: 🔍 Health Verification
 ## Project Structure
 
 ```
-ai-interview-coach-llmops/
+Smart-Interview-Prep-Agent/
 ├── agents/
 │   ├── question_generator.py   # generates interview questions
 │   └── answer_evaluator.py     # scores answers + feedback
@@ -95,6 +95,7 @@ ai-interview-coach-llmops/
 │   └── report.html             # final score report
 ├── models/
 │   └── schemas.py              # Pydantic request/response models
+├── images/                     # UI screenshots
 ├── tests/
 │   └── test_api.py
 ├── Dockerfile
@@ -111,7 +112,7 @@ ai-interview-coach-llmops/
 |---|---|---|
 | `/` | GET | Serves the web UI |
 | `/health` | GET | Health check |
-| `/generate` | POST | Generate interview questions from JD + resume |
+| `/generate` | POST | Generate questions from JD + resume |
 | `/evaluate` | POST | Score and give feedback on an answer |
 | `/report` | POST | Generate final report from all answers |
 
@@ -127,8 +128,8 @@ ai-interview-coach-llmops/
 ### Run Locally
 
 ```bash
-git clone https://github.com/your-username/ai-interview-coach-llmops.git
-cd ai-interview-coach-llmops
+git clone https://github.com/your-username/Smart-Interview-Prep-Agent.git
+cd Smart-Interview-Prep-Agent
 
 uv venv .venv
 source .venv/bin/activate
@@ -147,11 +148,11 @@ Open `http://localhost:8000` in your browser.
 ### Run with Docker
 
 ```bash
-docker build -t ai-interview-coach .
+docker build -t smart-interview-prep-agent .
 
 docker run -p 8000:8000 \
   -e OPENAI_API_KEY=your_key \
-  ai-interview-coach
+  smart-interview-prep-agent
 ```
 
 ### Run Tests
@@ -162,26 +163,33 @@ uv run pytest tests/ -v
 
 ---
 
-## Deploy to Azure (Manual)
+## Deploy to Azure
+
+### Prerequisites
+- Azure CLI installed and logged in
+- Azure Container Registry created
+- Azure Container Instance permissions
+
+### Steps
 
 ```bash
-# Login to ACR
-az acr login --name costforecastingmlopsacr
+# Login to your ACR
+az acr login --name <your-acr-name>
 
 # Build and push
-docker build -t costforecastingmlopsacr.azurecr.io/interview-coach-app:latest .
-docker push costforecastingmlopsacr.azurecr.io/interview-coach-app:latest
+docker build -t <your-acr-name>.azurecr.io/smart-interview-prep-agent:latest .
+docker push <your-acr-name>.azurecr.io/smart-interview-prep-agent:latest
 
 # Deploy to ACI
 az container create \
-  --resource-group mirlin-ml-dev \
-  --name interview-coach-app \
-  --image costforecastingmlopsacr.azurecr.io/interview-coach-app:latest \
+  --resource-group <your-resource-group> \
+  --name smart-interview-prep-agent \
+  --image <your-acr-name>.azurecr.io/smart-interview-prep-agent:latest \
   --cpu 1 --memory 1.5 \
-  --dns-name-label interview-coach-app \
+  --dns-name-label smart-interview-prep-agent \
   --ports 8000 \
   --os-type Linux \
-  --location canadacentral
+  --environment-variables OPENAI_API_KEY=<your-key>
 ```
 
 ---
@@ -197,13 +205,13 @@ az container create \
 ## Key Design Decisions
 
 **Why ACI over Azure Web App?**
-ACI gives a public URL instantly with no App Service Plan required. For a containerized LLM app with variable load, ACI is simpler and more cost-effective for a portfolio project.
+ACI gives a public URL instantly with no App Service Plan required. For a containerized LLM app, ACI is simpler and more cost-effective.
 
 **Why LangGraph over a single LLM call?**
-The interview flow has distinct steps — question generation and answer evaluation are separate concerns with different prompts, different context requirements, and different output schemas. LangGraph manages the shared state cleanly across both agents.
+Question generation and answer evaluation are separate concerns with different prompts, context, and output schemas. LangGraph manages shared state cleanly across both agents.
 
 **Why FastAPI serves the frontend?**
-Single container, single port, zero infrastructure complexity. FastAPI serves HTML files directly via `StaticFiles` — no separate frontend server needed.
+Single container, single port, zero infrastructure complexity. No separate frontend server needed.
 
 ---
 
