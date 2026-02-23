@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Interview Coach</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+  .container { max-width: 800px; margin: 0 auto; padding: 2rem 1rem; }
+  h1 { font-size: 1.8rem; font-weight: 700; color: #38bdf8; margin-bottom: 0.4rem; }
+  .subtitle { color: #94a3b8; margin-bottom: 2rem; font-size: 0.95rem; }
+  .card { background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  label { display: block; font-size: 0.85rem; font-weight: 600; color: #94a3b8; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  textarea, input { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; padding: 0.75rem; font-size: 0.95rem; resize: vertical; }
+  textarea:focus, input:focus { outline: none; border-color: #38bdf8; }
+  button { background: #0ea5e9; color: white; border: none; border-radius: 8px; padding: 0.7rem 1.5rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+  button:hover { background: #0284c7; }
+  button:disabled { background: #334155; cursor: not-allowed; }
+  .btn-secondary { background: #334155; }
+  .btn-secondary:hover { background: #475569; }
+  .question-badge { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 4px; text-transform: uppercase; margin-bottom: 0.75rem; }
+  .badge-technical { background: #1d4ed8; color: #bfdbfe; }
+  .badge-behavioural { background: #065f46; color: #a7f3d0; }
+  .badge-situational { background: #7c3aed; color: #ddd6fe; }
+  .badge-culture { background: #92400e; color: #fde68a; }
+  .progress { background: #1e293b; border-radius: 99px; height: 6px; margin-bottom: 1.5rem; }
+  .progress-fill { background: #38bdf8; height: 100%; border-radius: 99px; transition: width 0.4s; }
+  .feedback-section { margin-top: 1rem; }
+  .feedback-item { background: #0f172a; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; }
+  .score-badge { font-size: 2rem; font-weight: 800; color: #38bdf8; }
+  .grade-badge { font-size: 3rem; font-weight: 900; color: #f59e0b; }
+  .tag { display: inline-block; font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 4px; margin: 0.2rem; }
+  .tag-good { background: #065f46; color: #a7f3d0; }
+  .tag-gap { background: #7f1d1d; color: #fca5a5; }
+  .section-title { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 0.5rem; }
+  .improvement-item { background: #1e293b; border-left: 3px solid #f59e0b; padding: 0.75rem 1rem; border-radius: 0 8px 8px 0; margin-bottom: 0.5rem; font-size: 0.9rem; }
+  .hidden { display: none; }
+  #loader { text-align: center; padding: 2rem; color: #94a3b8; }
+  .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid #334155; border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🎯 AI Interview Coach</h1>
+  <p class="subtitle">Paste your resume and job description to get a personalised mock interview.</p>
+
+  <!-- PAGE 1: INPUT -->
+  <div id="page-input">
+    <div class="card">
+      <label>Job Description</label>
+      <textarea id="jd" rows="7" placeholder="Paste the full job description here..."></textarea>
+    </div>
+    <div class="card">
+      <label>Your Resume / LinkedIn Summary</label>
+      <textarea id="resume" rows="7" placeholder="Paste your resume text here..."></textarea>
+    </div>
+    <button id="btn-generate" onclick="startInterview()">Generate Interview Questions</button>
+  </div>
+
+  <!-- LOADER -->
+  <div id="loader" class="hidden">
+    <span class="spinner"></span> <span id="loader-msg">Analysing your profile...</span>
+  </div>
+
+  <!-- PAGE 2: INTERVIEW -->
+  <div id="page-interview" class="hidden">
+    <div class="progress"><div class="progress-fill" id="progress-bar" style="width:0%"></div></div>
+    <p id="question-counter" style="color:#64748b;font-size:0.85rem;margin-bottom:1rem;"></p>
+    <div class="card" id="question-card">
+      <span id="question-badge" class="question-badge"></span>
+      <p id="question-text" style="font-size:1.05rem;line-height:1.6;margin-bottom:1.25rem;"></p>
+      <label>Your Answer</label>
+      <textarea id="answer-input" rows="5" placeholder="Type your answer here..."></textarea>
+      <br/><br/>
+      <button id="btn-submit" onclick="submitAnswer()">Submit Answer →</button>
+    </div>
+  </div>
+
+  <!-- PAGE 3: REPORT -->
+  <div id="page-report" class="hidden">
+    <div class="card" style="text-align:center;">
+      <p class="section-title">Overall Score</p>
+      <div class="grade-badge" id="report-grade"></div>
+      <div class="score-badge" id="report-score"></div>
+      <p style="color:#64748b;font-size:0.85rem;margin-top:0.5rem;">out of 100</p>
+    </div>
+
+    <div class="card">
+      <p class="section-title" style="margin-bottom:1rem;">Top 3 Areas to Improve</p>
+      <div id="improvements"></div>
+    </div>
+
+    <div class="card">
+      <p class="section-title" style="margin-bottom:1rem;">Question-by-Question Breakdown</p>
+      <div id="breakdown"></div>
+    </div>
+
+    <button class="btn-secondary" onclick="resetApp()">🔄 Try Again</button>
+  </div>
+</div>
+
+<script>
+  const SESSION_ID = "session_" + Math.random().toString(36).slice(2);
+  let questions = [];
+  let currentIndex = 0;
+  let evaluations = [];
+
+  function showLoader(msg) {
+    document.getElementById("loader-msg").textContent = msg;
+    document.getElementById("loader").classList.remove("hidden");
+  }
+
+  function hideLoader() {
+    document.getElementById("loader").classList.add("hidden");
+  }
+
+  function showPage(page) {
+    ["page-input", "page-interview", "page-report"].forEach(p =>
+      document.getElementById(p).classList.add("hidden")
+    );
+    document.getElementById(page).classList.remove("hidden");
+  }
+
+  async function startInterview() {
+    const jd = document.getElementById("jd").value.trim();
+    const resume = document.getElementById("resume").value.trim();
+    if (!jd || !resume) { alert("Please fill in both fields."); return; }
+
+    document.getElementById("btn-generate").disabled = true;
+    showPage("page-input");
+    showLoader("Analysing your profile and generating questions...");
+
+    const res = await fetch("/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: SESSION_ID, job_description: jd, resume })
+    });
+    const data = await res.json();
+    questions = data.questions;
+    currentIndex = 0;
+    evaluations = [];
+
+    hideLoader();
+    showPage("page-interview");
+    renderQuestion();
+  }
+
+  function renderQuestion() {
+    const q = questions[currentIndex];
+    const total = questions.length;
+    document.getElementById("progress-bar").style.width = `${(currentIndex / total) * 100}%`;
+    document.getElementById("question-counter").textContent = `Question ${currentIndex + 1} of ${total}`;
+
+    const badge = document.getElementById("question-badge");
+    badge.textContent = q.type;
+    badge.className = "question-badge badge-" + q.type;
+
+    document.getElementById("question-text").textContent = q.question;
+    document.getElementById("answer-input").value = "";
+    document.getElementById("btn-submit").disabled = false;
+  }
+
+  async function submitAnswer() {
+    const answer = document.getElementById("answer-input").value.trim();
+    if (!answer) { alert("Please write an answer before submitting."); return; }
+
+    document.getElementById("btn-submit").disabled = true;
+    showLoader("Evaluating your answer...");
+
+    const res = await fetch("/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: SESSION_ID, question_id: questions[currentIndex].id, answer })
+    });
+    const evaluation = await res.json();
+    evaluations.push({ question: questions[currentIndex], evaluation });
+
+    hideLoader();
+    currentIndex++;
+
+    if (currentIndex < questions.length) {
+      showPage("page-interview");
+      renderQuestion();
+    } else {
+      await generateReport();
+    }
+  }
+
+  async function generateReport() {
+    showLoader("Generating your final report...");
+    const res = await fetch("/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: SESSION_ID })
+    });
+    const data = await res.json();
+    hideLoader();
+    renderReport(data);
+    showPage("page-report");
+  }
+
+  function renderReport(data) {
+    document.getElementById("report-grade").textContent = data.grade;
+    document.getElementById("report-score").textContent = data.overall_score + "/100";
+
+    const imp = document.getElementById("improvements");
+    imp.innerHTML = data.top_improvements.map(i =>
+      `<div class="improvement-item">${i}</div>`
+    ).join("");
+
+    const bd = document.getElementById("breakdown");
+    bd.innerHTML = evaluations.map(({ question, evaluation }) => `
+      <div class="feedback-item" style="margin-bottom:1rem;">
+        <span class="question-badge badge-${question.type}">${question.type}</span>
+        <p style="font-size:0.95rem;margin-bottom:0.75rem;font-weight:600;">${question.question}</p>
+        <p style="font-size:1.4rem;font-weight:800;color:#38bdf8;margin-bottom:0.5rem;">${evaluation.score}/10</p>
+        <div>
+          <p class="section-title">Strengths</p>
+          ${evaluation.strengths.map(s => `<span class="tag tag-good">${s}</span>`).join("")}
+        </div>
+        <div style="margin-top:0.75rem;">
+          <p class="section-title">Gaps</p>
+          ${evaluation.gaps.map(g => `<span class="tag tag-gap">${g}</span>`).join("")}
+        </div>
+        <div style="margin-top:0.75rem;background:#0f172a;padding:0.75rem;border-radius:8px;">
+          <p class="section-title">Ideal Answer Structure</p>
+          <p style="font-size:0.88rem;color:#cbd5e1;line-height:1.6;">${evaluation.ideal_structure}</p>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  function resetApp() {
+    questions = []; currentIndex = 0; evaluations = [];
+    document.getElementById("btn-generate").disabled = false;
+    document.getElementById("jd").value = "";
+    document.getElementById("resume").value = "";
+    showPage("page-input");
+  }
+</script>
+</body>
+</html>

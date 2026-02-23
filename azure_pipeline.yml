@@ -1,0 +1,222 @@
+trigger:
+  batch: true
+  branches:
+    include:
+      - master
+      - main
+
+pr:
+  branches:
+    include:
+      - master
+      - main
+
+variables:
+  - group: interview-coach-secrets
+  - name: ACR_NAME
+    value: "costforecastingmlopsacr"
+  - name: ACR_LOGIN_SERVER
+    value: "costforecastingmlopsacr.azurecr.io"
+  - name: IMAGE_NAME
+    value: "interview-coach-app"
+  - name: IMAGE_TAG
+    value: "$(Build.BuildId)"
+  - name: RESOURCE_GROUP
+    value: "mirlin-ml-dev"
+  - name: ACI_NAME
+    value: "interview-coach-app"
+  - name: LOCATION
+    value: "canadacentral"
+  - name: PUBLIC_URL
+    value: "interview-coach-app.canadacentral.azurecontainer.io"
+
+stages:
+
+  # ─────────────────────────────────────────────
+  # Stage 1: Quality Gate
+  # ─────────────────────────────────────────────
+  - stage: QualityGate
+    displayName: "🧪 Quality Gate — Lint & Test"
+    jobs:
+      - job: LintAndTest
+        displayName: "Ruff Lint + Pytest"
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.11"
+            displayName: "Set Python 3.11"
+
+          - script: |
+              pip install uv
+              uv sync --frozen
+            displayName: "Install dependencies via uv"
+
+          - script: |
+              uv run ruff check .
+            displayName: "Lint with Ruff"
+
+          - script: |
+              uv run pytest tests/ -v --tb=short
+            displayName: "Run Pytest"
+            env:
+              OPENAI_API_KEY: $(OPENAI_API_KEY)
+
+  # ─────────────────────────────────────────────
+  # Stage 2: Build & Push to ACR
+  # ─────────────────────────────────────────────
+  - stage: BuildAndPush
+    displayName: "🐳 Build & Push — Azure Container Registry"
+    dependsOn: QualityGate
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/master'), eq(variables['Build.SourceBranch'], 'refs/heads/main')))
+    jobs:
+      - job: BuildAndPushImage
+        displayName: "Docker Build & Push to ACR"
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - task: AzureCLI@2
+            displayName: "Login to ACR"
+            inputs:
+              azureSubscription: "Cost Forecasting ML- v1"
+              scriptType: "bash"
+              scriptLocation: "inlineScript"
+              inlineScript: |
+                az acr login --name $(ACR_NAME)
+
+          - task: Docker@2
+            displayName: "Build Docker image"
+            inputs:
+              command: build
+              dockerfile: "$(Build.SourcesDirectory)/Dockerfile"
+              buildContext: "$(Build.SourcesDirectory)"
+              repository: "$(ACR_LOGIN_SERVER)/$(IMAGE_NAME)"
+              tags: |
+                $(IMAGE_TAG)
+                latest
+
+          - task: AzureCLI@2
+            displayName: "Push image to ACR"
+            inputs:
+              azureSubscription: "Cost Forecasting ML- v1"
+              scriptType: "bash"
+              scriptLocation: "inlineScript"
+              inlineScript: |
+                docker push $(ACR_LOGIN_SERVER)/$(IMAGE_NAME):$(IMAGE_TAG)
+                docker push $(ACR_LOGIN_SERVER)/$(IMAGE_NAME):latest
+                echo "============================================"
+                echo "✅ Image pushed to ACR successfully"
+                echo "📦 $(ACR_LOGIN_SERVER)/$(IMAGE_NAME):$(IMAGE_TAG)"
+                echo "📦 $(ACR_LOGIN_SERVER)/$(IMAGE_NAME):latest"
+                echo "============================================"
+
+  # ─────────────────────────────────────────────
+  # Stage 3: Deploy to ACI
+  # ─────────────────────────────────────────────
+  - stage: DeployToACI
+    displayName: "🚀 Deploy — Azure Container Instance"
+    dependsOn: BuildAndPush
+    condition: succeeded()
+    jobs:
+      - job: Deploy
+        displayName: "Update ACI with new image"
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - task: AzureCLI@2
+            displayName: "Delete existing ACI container"
+            inputs:
+              azureSubscription: "Cost Forecasting ML- v1"
+              scriptType: "bash"
+              scriptLocation: "inlineScript"
+              inlineScript: |
+                EXISTS=$(az container show \
+                  --resource-group $(RESOURCE_GROUP) \
+                  --name $(ACI_NAME) \
+                  --query name \
+                  --output tsv 2>/dev/null || echo "")
+
+                if [ -n "$EXISTS" ]; then
+                  echo "Existing container found — deleting..."
+                  az container delete \
+                    --resource-group $(RESOURCE_GROUP) \
+                    --name $(ACI_NAME) \
+                    --yes
+                  echo "✅ Existing container deleted"
+                else
+                  echo "No existing container found — skipping delete"
+                fi
+
+          - task: AzureCLI@2
+            displayName: "Deploy new ACI container"
+            inputs:
+              azureSubscription: "Cost Forecasting ML- v1"
+              scriptType: "bash"
+              scriptLocation: "inlineScript"
+              inlineScript: |
+                ACR_PASSWORD=$(az acr credential show \
+                  --name $(ACR_NAME) \
+                  --query "passwords[0].value" \
+                  --output tsv)
+
+                az container create \
+                  --resource-group $(RESOURCE_GROUP) \
+                  --name $(ACI_NAME) \
+                  --image $(ACR_LOGIN_SERVER)/$(IMAGE_NAME):$(IMAGE_TAG) \
+                  --cpu 1 \
+                  --memory 1.5 \
+                  --registry-login-server $(ACR_LOGIN_SERVER) \
+                  --registry-username $(ACR_NAME) \
+                  --registry-password $ACR_PASSWORD \
+                  --dns-name-label $(ACI_NAME) \
+                  --ports 8000 \
+                  --os-type Linux \
+                  --environment-variables OPENAI_API_KEY=$(OPENAI_API_KEY) \
+                  --location $(LOCATION)
+
+                echo "============================================"
+                echo "✅ ACI container deployed successfully"
+                echo "🌐 http://$(PUBLIC_URL):8000"
+                echo "============================================"
+            env:
+              OPENAI_API_KEY: $(OPENAI_API_KEY)
+
+  # ─────────────────────────────────────────────
+  # Stage 4: Health Verification
+  # ─────────────────────────────────────────────
+  - stage: HealthVerification
+    displayName: "🔍 Health Verification — Public URL"
+    dependsOn: DeployToACI
+    condition: succeeded()
+    jobs:
+      - job: VerifyDeployment
+        displayName: "Smoke Test Public Endpoint"
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - script: |
+              echo "Waiting 40 seconds for ACI to be ready..."
+              sleep 40
+            displayName: "Wait for container to start"
+
+          - script: |
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$(PUBLIC_URL):8000/health)
+              echo "Health check response: $HTTP_STATUS"
+
+              if [ "$HTTP_STATUS" != "200" ]; then
+                echo "❌ Health check failed — got HTTP $HTTP_STATUS"
+                exit 1
+              fi
+
+              echo "✅ Health check passed — app is live"
+            displayName: "Run health check"
+
+          - script: |
+              echo "============================================"
+              RESPONSE=$(curl -s http://$(PUBLIC_URL):8000/health)
+              echo "Health response: $RESPONSE"
+              echo "🌐 Live URL: http://$(PUBLIC_URL):8000"
+              echo "============================================"
+            displayName: "Print live URL"
+            
