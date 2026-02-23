@@ -16,6 +16,8 @@ iniconfig==2.3.0
 jiter==0.13.0
 jsonpatch==1.33
 jsonpointer==3.0.0
+langchain>=1.2.10
+langchain-community
 langchain-core==1.2.14
 langchain-openai==1.1.10
 langgraph==1.0.9
